@@ -1,0 +1,325 @@
+﻿<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>MBTI 유형 비교 시스템</title>
+</head>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        line-height: 1;
+    }
+
+    table {
+        table-layout: fixed;
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th,
+    td {
+        border: 1px solid black;
+        /* 기본적으로 모든 셀에 테두리 적용 */
+    }
+
+    /* 헤더 포함 그룹 테두리 */
+    thead th {
+        border: 1px solid black;
+        /* 헤더 테두리 */
+    }
+
+    /* 3개 행마다 그룹 전체에 테두리 설정 */
+    tbody tr:nth-of-type(5n) {
+        border-bottom: 3px solid black;
+        /* 그룹의 마지막 행 테두리 */
+    }
+
+    tbody tr:nth-of-type(5n+1) {
+        border-top: 3px solid black;
+        /* 그룹의 첫 번째 행 위쪽 테두리 */
+    }
+
+    /* 그룹 내 나머지 행의 위/아래 테두리를 제거 */
+    tbody tr:nth-of-type(5n+2) td {
+        border-top: none;
+        border-bottom: none;
+    }
+</style>
+
+<body>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 3%;">유형</th>
+                <th style="width: 20%;">질문</th>
+                <th style="width: 40%;">
+                    <select id="mbti-type-1" style="background-color: aquamarine;"></select>
+                </th>
+                <th style="width: 40%;">
+                    <select id="mbti-type-2" style="background-color: aquamarine;   "></select>
+                </th>
+            </tr>
+        </thead>
+        <tbody id="comparison-body"></tbody>
+        <tfoot id="personality-footer">
+        </tfoot>
+    </table>
+    <br />
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 3%;">유형</th>
+                <th style="width: 20%;">질문</th>
+                <th style="width: 40%;">답변1</th>
+                <th style="width: 40%;">답변2</th>
+            </tr>
+        </thead>
+        <tbody id="comparison-body2"></tbody>
+        <tfoot id="personality-footer2">
+        </tfoot>
+    </table>
+    <script>
+        const personalityUrl = "personalityTypes.json";
+        const questionsUrl = "questions.json";
+
+        let personalityData = null; // 데이터를 저장할 변수를 전역으로 선언
+        let questionsData = null; // 질문 데이터를 저장할 변수를 전역으로 선언
+        let answers = []; // 라디오 버튼 선택값 저장
+        let questions = []; // 질문 데이터를 저장
+
+        async function fetchJSON(url) {
+            const response = await fetch(url);
+            return await response.json();
+        }
+
+        function getCharacteristicContent(characteristics, title) {
+            const characteristic = characteristics.find(item => item.title === title);
+            return characteristic ? characteristic.content : "정보 없음";
+        }
+
+        async function updateComparison() {
+            const type1 = document.getElementById("mbti-type-1").value;
+            const type2 = document.getElementById("mbti-type-2").value;
+
+            if (!type1 || !type2) {
+                document.getElementById("comparison-body").innerHTML = "<tr><td colspan='3'>두 MBTI 유형을 선택해주세요.</td></tr>";
+                document.getElementById("personality-footer").innerHTML = "<tr><td colspan='3'>MBTI 유형 정보를 선택하세요.</td></tr>";
+                return;
+            }
+
+            const answers1 = calculateAnswers(type1, questionsData);
+            const answers2 = calculateAnswers(type2, questionsData);
+
+            const rows = questionsData.map((q, i) => `
+                <tr>
+                    <td style="text-align: center;">${q.dimension}</td>
+                    <td>${q.question}</td>
+                    <td style="color: ${answers1[i] !== answers2[i] ? 'red' : 'black'}">${answers1[i]}</td>
+                    <td style="color: ${answers1[i] !== answers2[i] ? 'red' : 'black'}">${answers2[i]}</td>
+                </tr>
+            `).join("");
+
+            document.getElementById("comparison-body").innerHTML = rows;
+
+            const footerRows = `
+                <tr>
+                    <td colspan="2">설명</td>
+                    <td>${personalityData[type1]?.description || "정보 없음"}</td>
+                    <td>${personalityData[type2]?.description || "정보 없음"}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">장점</td>
+                    <td>${getCharacteristicContent(personalityData[type1]?.characteristics || [], "장점")}</td>
+                    <td>${getCharacteristicContent(personalityData[type2]?.characteristics || [], "장점")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">성장 포인트</td>
+                    <td>${getCharacteristicContent(personalityData[type1]?.characteristics || [], "성장 포인트")}</td>
+                    <td>${getCharacteristicContent(personalityData[type2]?.characteristics || [], "성장 포인트")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">적합한 직업</td>
+                    <td>${getCharacteristicContent(personalityData[type1]?.characteristics || [], "적합한 직업")}</td>
+                    <td>${getCharacteristicContent(personalityData[type2]?.characteristics || [], "적합한 직업")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">인간관계</td>
+                    <td>${getCharacteristicContent(personalityData[type1]?.characteristics || [], "인간관계")}</td>
+                    <td>${getCharacteristicContent(personalityData[type2]?.characteristics || [], "인간관계")}</td>
+                </tr>
+            `;
+            document.getElementById("personality-footer").innerHTML = footerRows;
+
+            // =======================================
+
+            // 라디오 버튼 추가 및 이벤트 연결
+            answers = Array(questionsData.length).fill(0); // 초기화
+            questions = questionsData; // 질문 데이터 저장
+            const rows2 = questionsData.map((q, i) => `
+                <tr>
+                    <td style="text-align: center;">${q.dimension}</td>
+                    <td>${q.question}</td>
+                    <td>
+                        <input type="radio" id="row${i}_option1" name="row${i}_selection" value="0" 
+                            ${answers[i] === 0 ? 'checked' : ''} 
+                            onclick="updateAnswer(${i}, 0)">
+                        <label for="row${i}_option1">${q.options[0]}</label>
+                    </td>
+                    <td>
+                        <input type="radio" id="row${i}_option2" name="row${i}_selection" value="1" 
+                            ${answers[i] === 1 ? 'checked' : ''} 
+                            onclick="updateAnswer(${i}, 1)">
+                        <label for="row${i}_option2">${q.options[1]}</label>
+                    </td>
+                </tr>
+            `).join("");
+
+            document.getElementById("comparison-body2").innerHTML = rows2;
+
+            calculateResult(); // 초기 결과 계산
+        }
+
+        function updateAnswer(questionIndex, selectedAnswer) {
+            answers[questionIndex] = selectedAnswer; // 선택한 값을 업데이트
+            calculateResult(); // 실시간으로 결과 계산
+        }
+
+        function calculateResult() {
+            const scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+
+            // 점수 계산
+            for (let i = 0; i < questions.length; i++) {
+                const question = questions[i];
+                const answer = answers[i];
+                const dimension = question.dimension;
+
+                if (dimension === 'EI') {
+                    if (answer === 0) scores.E++;
+                    else scores.I++;
+                } else if (dimension === 'SN') {
+                    if (answer === 0) scores.S++;
+                    else scores.N++;
+                } else if (dimension === 'TF') {
+                    if (answer === 0) scores.T++;
+                    else scores.F++;
+                } else if (dimension === 'JP') {
+                    if (answer === 0) scores.J++;
+                    else scores.P++;
+                }
+            }
+
+            // 최종 MBTI 유형 계산
+            let type = '';
+            type += scores.E > scores.I ? 'E' : 'I';
+            type += scores.S > scores.N ? 'S' : 'N';
+            type += scores.T > scores.F ? 'T' : 'F';
+            type += scores.J > scores.P ? 'J' : 'P';
+
+            // personality-footer2 업데이트
+            const footerRows2 = `
+            <tr>
+                    <td colspan="2">이름</td>
+                    <td colspan="2">${type || "정보 없음"}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">이름</td>
+                    <td colspan="2">${personalityData[type]?.name || "정보 없음"}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">설명</td>
+                    <td colspan="2">${personalityData[type]?.description || "정보 없음"}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">장점</td>
+                    <td colspan="2">${getCharacteristicContent(personalityData[type]?.characteristics || [], "장점")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">성장 포인트</td>
+                    <td colspan="2">${getCharacteristicContent(personalityData[type]?.characteristics || [], "성장 포인트")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">적합한 직업</td>
+                    <td colspan="2">${getCharacteristicContent(personalityData[type]?.characteristics || [], "적합한 직업")}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">인간관계</td>
+                    <td colspan="2">${getCharacteristicContent(personalityData[type]?.characteristics || [], "인간관계")}</td>
+                </tr>
+            `;
+            document.getElementById("personality-footer2").innerHTML = footerRows2;
+        }
+
+        function calculateAnswers(type, questions) {
+            const targetScores = {
+                E: type.includes('E') ? 1 : 0,
+                I: type.includes('I') ? 1 : 0,
+                S: type.includes('S') ? 1 : 0,
+                N: type.includes('N') ? 1 : 0,
+                T: type.includes('T') ? 1 : 0,
+                F: type.includes('F') ? 1 : 0,
+                J: type.includes('J') ? 1 : 0,
+                P: type.includes('P') ? 1 : 0,
+            };
+
+            return questions.map(q => {
+                if (q.dimension === 'EI') return targetScores.E > targetScores.I ? q.options[0] : q.options[1];
+                if (q.dimension === 'SN') return targetScores.S > targetScores.N ? q.options[0] : q.options[1];
+                if (q.dimension === 'TF') return targetScores.T > targetScores.F ? q.options[0] : q.options[1];
+                if (q.dimension === 'JP') return targetScores.J > targetScores.P ? q.options[0] : q.options[1];
+            });
+        }
+
+        document.addEventListener("DOMContentLoaded", async () => {
+            try {
+                personalityData = await fetchJSON(personalityUrl); // 데이터를 Fetch
+                questionsData = await fetchJSON(questionsUrl);
+
+                const mbtiSelect1 = document.getElementById("mbti-type-1");
+                const mbtiSelect2 = document.getElementById("mbti-type-2");
+
+                Object.keys(personalityData).forEach(type => {
+                    const option1 = document.createElement("option");
+                    option1.value = type;
+                    option1.textContent = `${type} - ${personalityData[type].name}`;
+                    mbtiSelect1.appendChild(option1);
+
+                    const option2 = document.createElement("option");
+                    option2.value = type;
+                    option2.textContent = `${type} - ${personalityData[type].name}`;
+                    mbtiSelect2.appendChild(option2);
+                });
+
+                mbtiSelect1.addEventListener("change", updateComparison);
+                mbtiSelect2.addEventListener("change", updateComparison);
+
+                // 초기 업데이트
+                updateComparison();
+            } catch (error) {
+                console.error("데이터를 가져오는 중 오류가 발생했습니다.", error);
+            }
+        });
+    </script>
+    <script type="text/javascript">
+        var sc_project = 13139524;
+        var sc_invisible = 1;
+        var sc_security = "83232f9f"; 
+    </script>
+    <script type="text/javascript" src="https://www.statcounter.com/counter/counter.js" async></script>
+    <noscript>
+        <div class="statcounter"><a title="Web Analytics" href="https://statcounter.com/" target="_blank"><img
+                    class="statcounter" src="https://c.statcounter.com/13139524/0/83232f9f/1/" alt="Web Analytics"
+                    referrerPolicy="no-referrer-when-downgrade"></a></div>
+    </noscript>
+    <!-- End of Statcounter Code -->
+    <script type="text/javascript" src="//wcs.naver.net/wcslog.js"></script>
+    <script type="text/javascript">
+        if (!wcs_add) var wcs_add = {};
+        wcs_add["wa"] = "14cd277c95fd60";
+        if (window.wcs) {
+            wcs_do();
+        }
+    </script>
+</body>
+
+</html>
